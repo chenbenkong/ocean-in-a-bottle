@@ -159,7 +159,22 @@ export function createDiorama(scene, manager) {
     uSunCol: { value: new THREE.Color(0xffe0b0) },
     uAmb: { value: 0.6 },
     uHorizon: { value: new THREE.Color(0x9fd0ee) },
+    uNmap: { value: null },
   };
+  {
+    const s2 = 256, c = document.createElement('canvas'); c.width = c.height = s2;
+    const g = c.getContext('2d'), img = g.createImageData(s2, s2);
+    const HN = (x, y) => Math.sin(x * 0.11 + y * 0.07) * 3 + Math.sin(x * 0.05 - y * 0.13) * 4 + Math.sin((x + y) * 0.031) * 5;
+    for (let y = 0; y < s2; y++) for (let x = 0; x < s2; x++) {
+      const dx = HN(x + 1, y) - HN(x - 1, y), dy = HN(x, y + 1) - HN(x, y - 1);
+      const n = new THREE.Vector3(-dx, 8, -dy).normalize(), i = (y * s2 + x) * 4;
+      img.data[i] = (n.x * 0.5 + 0.5) * 255; img.data[i + 1] = (n.y * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (n.z * 0.5 + 0.5) * 255; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    waterU.uNmap.value = t;
+  }
   {
     const X0 = 0.85, X1 = 10.45, NX = 96, NZ = 56, ZMAX = 3.6;
     const pos = [], idx = [];
@@ -189,7 +204,7 @@ export function createDiorama(scene, manager) {
       transparent: true, depthWrite: false, uniforms: waterU,
       vertexShader: `
         uniform float uTime,uStorm;
-        varying vec3 vW; varying vec3 vN;
+        varying vec3 vW; varying vec3 vN; varying float vH; varying vec2 vUv;
         void main(){
           vec3 p = position;
           float A = 0.34*(1.0+uStorm*1.9);
@@ -198,24 +213,31 @@ export function createDiorama(scene, manager) {
           float dz = A*( cos(p.z*1.9-t*1.35)*0.30*1.9 + cos((p.x+p.z)*0.8+t*2.3)*0.25*0.8 );
           float h  = A*( sin(p.x*1.35+t*1.8)*0.55 + sin(p.z*1.9-t*1.35)*0.30
                    + sin((p.x+p.z)*0.8+t*2.3)*0.25 + sin(p.x*2.6-t*3.1)*0.12*(1.0+uStorm*0.7) );
-          p.y += h;
+          p.y += h; vH = h;
           vN = normalize(vec3(-dx, 1.0, -dz));
+          vUv = p.xz;
           vec4 wp = modelMatrix*vec4(p,1.0); vW = wp.xyz;
           gl_Position = projectionMatrix*viewMatrix*wp;
         }`,
       fragmentShader: `
-        varying vec3 vW; varying vec3 vN;
-        uniform vec3 uSunDir,uSunCol,uHorizon; uniform float uAmb;
+        varying vec3 vW; varying vec3 vN; varying float vH; varying vec2 vUv;
+        uniform vec3 uSunDir,uSunCol,uHorizon; uniform float uAmb,uTime,uStorm;
+        uniform sampler2D uNmap;
         void main(){
           vec3 N = normalize(vN);
+          vec3 n1 = texture2D(uNmap, vUv*0.55 + uTime*vec2(0.020,0.013)).xyz*2.0-1.0;
+          vec3 n2 = texture2D(uNmap, vUv*1.40 - uTime*vec2(0.016,0.022)).xyz*2.0-1.0;
+          N = normalize(N + vec3(n1.x,0.0,n1.z)*0.30 + vec3(n2.x,0.0,n2.z)*0.16);
           vec3 V = normalize(cameraPosition - vW);
           float fres = pow(1.0 - max(dot(N,V),0.0), 3.0);
           vec3 deep = vec3(0.015,0.10,0.18);
           vec3 shallow = vec3(0.04,0.24,0.30);
           vec3 col = mix(deep, shallow, 0.5+0.5*N.y) * (uAmb*0.9+0.35);
-          col += uSunCol * pow(max(dot(reflect(-normalize(uSunDir),N),V),0.0), 90.0) * 0.9;
-          col = mix(col, uHorizon*0.9, fres*0.65);
-          gl_FragColor = vec4(col, 0.72);
+          col += uSunCol * pow(max(dot(reflect(-normalize(uSunDir),N),V),0.0), 120.0) * 1.1;
+          col = mix(col, uHorizon*0.85, fres*0.7);
+          float foam = smoothstep(0.30, 0.52, vH) * (0.45 + 0.45*uStorm);
+          col = mix(col, vec3(0.93,0.96,0.97), foam);
+          gl_FragColor = vec4(col, 0.60 + foam*0.3);
         }`,
     });
     const sea = new THREE.Mesh(geo, mat);
@@ -299,11 +321,19 @@ export function createDiorama(scene, manager) {
     const roof = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.28, 12), new THREE.MeshStandardMaterial({ color: 0x8a2c26, roughness: 0.5 }));
     roof.position.y = y + 0.56; g.add(roof);
     lhLamp = new THREE.PointLight(0xffe2a0, 0, 7, 1.6); lhLamp.position.y = y + 0.3; g.add(lhLamp);
-    beamMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.1,
+    const bc = document.createElement('canvas'); bc.width = 8; bc.height = 128;
+    const bg = bc.getContext('2d');
+    const grd = bg.createLinearGradient(0, 0, 0, 128);
+    grd.addColorStop(0, 'rgba(255,242,176,0.85)');
+    grd.addColorStop(0.45, 'rgba(255,242,176,0.30)');
+    grd.addColorStop(1, 'rgba(255,242,176,0)');
+    bg.fillStyle = grd; bg.fillRect(0, 0, 8, 128);
+    const beamTex = new THREE.CanvasTexture(bc);
+    beamMat = new THREE.MeshBasicMaterial({ map: beamTex, color: 0xfff2b0, transparent: true, opacity: 0.1,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     beamRot = new THREE.Group(); beamRot.position.y = y + 0.3;
-    const beamGeo = new THREE.ConeGeometry(0.42, 3.0, 14, 1, true);
-    beamGeo.translate(0, -1.5, 0);
+    const beamGeo = new THREE.ConeGeometry(0.34, 2.6, 14, 1, true);
+    beamGeo.translate(0, -1.3, 0);
     for (const rot of [0, Math.PI]) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.rotation.z = Math.PI / 2; beam.rotation.y = rot;
@@ -417,10 +447,11 @@ export function createDiorama(scene, manager) {
     m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
     const bb = new THREE.Box3().setFromObject(m);
     const size = bb.getSize(new THREE.Vector3());
+    window.__errs.push('PINNACE bbox y: ' + bb.min.y.toFixed(2) + ' .. ' + bb.max.y.toFixed(2));
     const k = 2.6 / Math.max(size.x, size.z, 0.001);
     const wrap = new THREE.Group();
     wrap.rotation.y = Math.PI / 2; // 模型长轴沿 Z → 转为 +X 朝前
-    m.position.set(0, -(bb.min.y + 1.2), 0); // 水线：龙骨上方 1.2（模型单位）
+    m.position.set(0, 0, 0); // Poly Haven 模型以水线为原点
     wrap.add(m);
     wrap.scale.setScalar(k);
     shipTilt.add(wrap);
@@ -554,6 +585,8 @@ export function createDiorama(scene, manager) {
       waterU.uStorm.value = storm;
       waterU.uTime.value = simT;
       deepU.uTime.value = simT;
+      // 深水体裁剪面 = 内海平面的世界高度（随瓶体浮沉）
+      deepU.uSea.value = bottle.position.y - SW * (AXIS_Y - SEA);
 
       /* —— 瓶体浮力 —— */
       {

@@ -56,7 +56,7 @@ composer.addPass(new OutputPass());
 const stickState = { x: 0, y: 0 };           // x: 左右转向  y: 前进(+)/后退(-)
 (function () {
   const pad = document.getElementById('stick'), knob = document.getElementById('stickKnob');
-  let active = false, cx = 0, cy = 0, R = 46;
+  let active = false, cx = 0, cy = 0, R = 66;
   function setKnob(dx, dy) { knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; }
   function apply(dx, dy) {
     const len = Math.hypot(dx, dy), m = Math.min(1, len / R);
