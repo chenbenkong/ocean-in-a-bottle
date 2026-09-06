@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>瓶中沧海 · 漂流版 Ocean in a Bottle</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#000;}
+  body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;user-select:none;}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;cursor:grab;}
+  canvas:active{cursor:grabbing;}
+  .hud{position:fixed;color:#f2ead8;pointer-events:none;z-index:5;text-shadow:0 1px 8px rgba(0,20,40,.7);}
+  #title{top:18px;left:22px;}
+  #title h1{margin:0;font-size:22px;font-weight:600;letter-spacing:6px;}
+  #title p{margin:4px 0 0;font-size:11px;letter-spacing:2px;opacity:.6;}
+  #panel{bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;
+         background:rgba(10,20,30,.5);border:1px solid rgba(240,230,210,.22);border-radius:14px;
+         padding:9px 14px;backdrop-filter:blur(8px);pointer-events:auto;}
+  .btn{min-width:44px;height:30px;border-radius:8px;border:1px solid rgba(240,230,210,.28);
+       background:rgba(240,230,210,.1);color:#f2ead8;font-size:13px;cursor:pointer;transition:all .15s;}
+  .btn:hover{background:rgba(240,230,210,.25);}
+  .btn.on{background:#e0b25e;border-color:#e0b25e;color:#20304a;font-weight:700;}
+  #hint{font-size:11px;opacity:.65;letter-spacing:1px;margin-left:6px;}
+  #fps{top:18px;right:20px;font-size:11px;opacity:.5;}
+  #stormBtn{display:none;}
+  @media (pointer:coarse){ #stormBtn{display:block;} #hint{display:none;} }
+  #loading{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;gap:14px;
+           align-items:center;justify-content:center;background:#0a1420;color:#dfeaf4;
+           transition:opacity .8s;letter-spacing:4px;}
+  #loading .bar{width:220px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;}
+  #loading .bar i{display:block;height:100%;width:0;background:#e0b25e;transition:width .3s;}
+  #loading.done{opacity:0;pointer-events:none;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading"><div style="font-size:20px;">瓶 中 沧 海</div><div class="bar"><i id="loadBar"></i></div><div id="loadTxt" style="font-size:11px;opacity:.6;">正在扬帆…</div></div>
+<div class="hud" id="title"><h1>瓶 中 沧 海</h1><p>DRIFTING OCEAN IN A BOTTLE — PBR DIORAMA</p></div>
+<div class="hud" id="fps"></div>
+<div class="hud" id="panel">
+  <button class="btn spd" data-s="4">×4</button>
+  <button class="btn spd" data-s="12">×12</button>
+  <button class="btn spd on" data-s="1">×1</button>
+  <button class="btn spd" data-s="0">⏸</button>
+  <button class="btn" id="stormBtn">⛈ 风暴</button>
+  <span id="hint">拖动环视 · 滚轮缩放 · 按住 Space 掀起风暴</span>
+</div>
+
+<script>
+window.__errs=[];
+window.onerror=function(m,s,l,c,e){window.__errs.push(String(m).slice(0,200)+' @'+String(s||'').split('/').pop()+':'+l+':'+c);};
+window.addEventListener('unhandledrejection',function(e){window.__errs.push('PROMISE: '+e.reason);});
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./app/main.js?v=1"></script>
+</body>
+</html>
