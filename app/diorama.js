@@ -408,7 +408,6 @@ export function createDiorama(scene, manager) {
   /* —— glTF 帆船 —— */
   const ship = new THREE.Group(), shipTilt = new THREE.Group();
   ship.add(shipTilt); content.add(ship);
-  window.__errs.push('PINNACE: load start');
   gltfLoader.load(MODEL + '../pinnace/ship_pinnace.gltf', g => {
     window.__errs.push('PINNACE: onLoad');
     const m = g.scene;
