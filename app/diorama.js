@@ -79,9 +79,38 @@ export function createDiorama(scene, manager) {
     glass.position.x = -HALF;
     glass.renderOrder = 20;
     bottle.add(glass);
+    const corkC = document.createElement('canvas'); corkC.width = 64; corkC.height = 256;
+    const cg2 = corkC.getContext('2d');
+    cg2.fillStyle = '#c9a06a'; cg2.fillRect(0, 0, 64, 256);
+    for (let i = 0; i < 10; i++) {
+      cg2.strokeStyle = 'rgba(140,100,55,' + (0.25 + Math.random() * 0.25) + ')';
+      cg2.lineWidth = 2 + Math.random() * 3;
+      cg2.beginPath(); cg2.moveTo(0, i * 26 + Math.random() * 10);
+      cg2.bezierCurveTo(20, i * 26 + 8, 44, i * 26 - 8, 64, i * 26 + Math.random() * 10); cg2.stroke();
+    }
+    const corkT = new THREE.CanvasTexture(corkC); corkT.colorSpace = THREE.SRGBColorSpace;
     const cork = new THREE.Mesh(new THREE.CylinderGeometry(1.42 * SW, 1.5 * SW, 1.15 * SW, 24),
-      new THREE.MeshLambertMaterial({ color: 0xc9a06a }));
+      new THREE.MeshLambertMaterial({ map: corkT }));
     cork.rotation.z = -Math.PI / 2; cork.position.set(18.05 * SW - HALF, 0, 0); bottle.add(cork);
+    for (const rr of [15.95, 16.2, 16.45]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(rr * SW * 0.94, 0.045 * SW, 8, 32),
+        new THREE.MeshLambertMaterial({ color: 0xa8c8b8, transparent: true, opacity: 0.5 }));
+      ring.rotation.y = Math.PI / 2; ring.position.set(rr * SW - HALF, 0, 0); bottle.add(ring);
+    }
+    const rollC = document.createElement('canvas'); rollC.width = 64; rollC.height = 64;
+    const rg2 = rollC.getContext('2d');
+    rg2.fillStyle = '#e8d9b0'; rg2.fillRect(0, 0, 64, 64);
+    rg2.fillStyle = '#d8c69a'; rg2.fillRect(0, 0, 64, 6); rg2.fillRect(0, 58, 64, 6);
+    for (let i = 0; i < 6; i++) {
+      rg2.strokeStyle = 'rgba(120,90,50,.4)'; rg2.beginPath();
+      rg2.moveTo(8, 14 + i * 8); rg2.lineTo(56, 14 + i * 8); rg2.stroke();
+    }
+    const rollT = new THREE.CanvasTexture(rollC); rollT.colorSpace = THREE.SRGBColorSpace;
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * SW, 0.5 * SW, 2.4 * SW, 16),
+      new THREE.MeshLambertMaterial({ map: rollT }));
+    roll.rotation.z = Math.PI / 2 - 0.15; roll.rotation.y = 0.4;
+    roll.position.set(1.9 * SW, 0.2 * SW, 1.1 * SW);
+    bottle.add(roll);
     const wax = new THREE.Mesh(new THREE.CylinderGeometry(1.72 * SW, 1.55 * SW, 0.5 * SW, 24),
       new THREE.MeshLambertMaterial({ color: 0xa32226, roughness: 0.5 }));
     wax.rotation.z = -Math.PI / 2; wax.position.set(18.6 * SW - HALF, 0, 0); bottle.add(wax);
@@ -324,16 +353,16 @@ export function createDiorama(scene, manager) {
     const bc = document.createElement('canvas'); bc.width = 8; bc.height = 128;
     const bg = bc.getContext('2d');
     const grd = bg.createLinearGradient(0, 0, 0, 128);
-    grd.addColorStop(0, 'rgba(255,242,176,0.85)');
-    grd.addColorStop(0.45, 'rgba(255,242,176,0.30)');
+    grd.addColorStop(0, 'rgba(255,242,176,0.55)');
+    grd.addColorStop(0.45, 'rgba(255,242,176,0.18)');
     grd.addColorStop(1, 'rgba(255,242,176,0)');
     bg.fillStyle = grd; bg.fillRect(0, 0, 8, 128);
     const beamTex = new THREE.CanvasTexture(bc);
     beamMat = new THREE.MeshBasicMaterial({ map: beamTex, color: 0xfff2b0, transparent: true, opacity: 0.1,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide });
     beamRot = new THREE.Group(); beamRot.position.y = y + 0.3;
-    const beamGeo = new THREE.ConeGeometry(0.34, 2.6, 14, 1, true);
-    beamGeo.translate(0, -1.3, 0);
+    const beamGeo = new THREE.ConeGeometry(0.26, 2.2, 18, 1, true);
+    beamGeo.translate(0, -1.1, 0);
     for (const rot of [0, Math.PI]) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.rotation.z = Math.PI / 2; beam.rotation.y = rot;
@@ -447,10 +476,10 @@ export function createDiorama(scene, manager) {
     m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
     const bb = new THREE.Box3().setFromObject(m);
     const size = bb.getSize(new THREE.Vector3());
-    const k = 2.6 / Math.max(size.x, size.z, 0.001);
+    const k = 3.2 / Math.max(size.x, size.z, 0.001);
     const wrap = new THREE.Group();
     wrap.rotation.y = Math.PI / 2; // 模型长轴沿 Z → 转为 +X 朝前
-    m.position.set(0, 0, 0); // Poly Haven 模型以水线为原点
+    m.position.set(0, 0.45, 0); // 略微抬升，保证船体/甲板高于内海面
     wrap.add(m);
     wrap.scale.setScalar(k);
     shipTilt.add(wrap);
@@ -609,18 +638,24 @@ export function createDiorama(scene, manager) {
         // 漂流物理：摇杆转向/推进 + 波浪推动（永不静止）
         const stick = st.stick || { x: 0, y: 0 };
         const seaYaw = Math.atan2(WAVES_LAZY.dz, WAVES_LAZY.dx);           // 主浪方向
-        const wander = Math.sin(simT * 0.07) * 0.06 + Math.sin(simT * 0.023 + 2) * 0.04;
+        const wander = Math.sin(simT * 0.07) * 0.10 + Math.sin(simT * 0.023 + 2) * 0.07;
         const waveYaw = Math.sin(simT * 0.31) * 0.05 * (1 + storm);        // 波浪拍打的偏航摆动
         driftYaw += (stick.x * 0.95 + wander + waveYaw) * dt;
-        const surge = 1.5 + stick.y * 3.2                                  // 摇杆推进
-                    + Math.sin(simT * 0.42) * 0.35 * (1 + storm)           // 涌浪起伏推力
-                    + storm * 1.2;
+        const surge = 2.4 + stick.y * 4.5                                  // 摇杆推进
+                    + Math.sin(simT * 0.42) * 0.7 * (1 + storm)            // 涌浪起伏推力
+                    + storm * 2.0;
         bottle.position.x += (Math.cos(driftYaw) + WAVES_LAZY.dx * 0.35) * dt * surge;
         bottle.position.z += (Math.sin(driftYaw) + WAVES_LAZY.dz * 0.35) * dt * surge;
         // 横向摇摆（浪从侧面的推挤）
-        const swayR = Math.sin(simT * 0.55 + 1.3) * 0.25 * (1 + storm * 1.5);
+        const swayR = Math.sin(simT * 0.55 + 1.3) * 0.45 * (1 + storm * 1.5);
         bottle.position.x += -Math.sin(driftYaw) * swayR * dt;
         bottle.position.z += Math.cos(driftYaw) * swayR * dt;
+        // 航行尾迹：瓶尾持续白色泡沫，凸显移动
+        if (Math.random() < 0.75) {
+          const lat = (Math.random() - 0.5) * 9;
+          emitOSpray(tmpV.set(bx - c * 16 - s * lat, 0.15, bz + s * 16 - c * lat),
+            new THREE.Vector3(-c * 0.5 + (Math.random() - 0.5), 0.4 + Math.random() * 0.6, -s * 0.5 + (Math.random() - 0.5)));
+        }
         if (Math.hypot(bottle.position.x, bottle.position.z) > 46) {
           driftYaw = Math.atan2(-bottle.position.z, -bottle.position.x) + (Math.random() - 0.5);
         }
@@ -774,7 +809,7 @@ export function createDiorama(scene, manager) {
       waterU.uSunDir.value.copy(st.sunDir);
       waterU.uSunCol.value.copy(st.sunCol);
       waterU.uHorizon.value.copy(st.horizonCol);
-      beamMat.opacity = 0.06 + nf * 0.5 + storm * 0.12;
+      beamMat.opacity = 0.035 + nf * 0.42 + storm * 0.1;
       lanternMat.color.setRGB(1, 0.9, 0.6).multiplyScalar(0.5 + nf * 1.6);
       lhLamp.intensity = nf * 4;
       hutWinMat.color.setRGB(1, 0.72, 0.35).multiplyScalar(0.3 + nf * 1.3);

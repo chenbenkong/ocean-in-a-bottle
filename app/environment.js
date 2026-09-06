@@ -3,14 +3,9 @@ import * as THREE from 'three';
 import { Water } from 'three/addons/objects/Water.js';
 
 const WAVES = [
-  { dx: 0.985, dz: 0.174, amp: 1.05, k: 0.1047, w: 1.013 },
-  { dx: 0.825, dz: 0.565, amp: 0.58, k: 0.1848, w: 1.750 },
-  { dx: 0.128, dz: 0.992, amp: 0.38, k: 0.2856, w: 2.840 },
-  { dx: -0.637, dz: 0.771, amp: 0.30, k: 0.4488, w: 4.400 },
-  { dx: 0.707, dz: 0.707, amp: 0.22, k: 0.6283, w: 2.483 },
-  { dx: -0.208, dz: 0.978, amp: 0.15, k: 0.8976, w: 2.965 },
-  { dx: 0.951, dz: -0.309, amp: 0.10, k: 1.2566, w: 3.510 },
-  { dx: -0.500, dz: -0.866, amp: 0.07, k: 1.7952, w: 4.198 },
+  { dx: 0.985, dz: 0.174, amp: 1.55, k: 0.1047, w: 1.013 },
+  { dx: 0.825, dz: 0.565, amp: 0.85, k: 0.1848, w: 1.750 },
+  { dx: 0.128, dz: 0.992, amp: 0.52, k: 0.2856, w: 2.840 },
 ];
 export function swellH(x, z, t, sf) {
   let h = 0;
@@ -123,7 +118,7 @@ export function createEnvironment(scene, manager) {
     sunDirection: new THREE.Vector3(),
     sunColor: 0xffffff,
     waterColor: 0x07354d,
-    distortionScale: 2.6,
+    distortionScale: 3.4,
     fog: true,
   });
   water.rotation.x = -Math.PI / 2;
