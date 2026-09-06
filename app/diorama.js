@@ -312,6 +312,10 @@ export function createDiorama(scene, manager) {
     g.add(beamRot);
     content.add(g);
   }
+  const hutWinMat = new THREE.MeshBasicMaterial({ color: 0xffc36a });
+  const hutWin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.2), hutWinMat);
+  hutWin.position.set(4.45 + CX + 0.52, SEA + terrainH(4.45, 0.85) + 0.36, 0.85);
+  content.add(hutWin);
   const hutLamp = new THREE.PointLight(0xffb45c, 0, 5, 1.6);
   hutLamp.position.set(4.45 + CX + 0.75, SEA + terrainH(4.45, 0.85) + 0.4, 0.85); content.add(hutLamp);
 
@@ -409,12 +413,10 @@ export function createDiorama(scene, manager) {
   const ship = new THREE.Group(), shipTilt = new THREE.Group();
   ship.add(shipTilt); content.add(ship);
   gltfLoader.load(MODEL + '../pinnace/ship_pinnace.gltf', g => {
-    window.__errs.push('PINNACE: onLoad');
     const m = g.scene;
     m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
     const bb = new THREE.Box3().setFromObject(m);
     const size = bb.getSize(new THREE.Vector3());
-    window.__errs.push('PINNACE size: ' + size.x.toFixed(1) + ' x ' + size.y.toFixed(1) + ' x ' + size.z.toFixed(1) + ' min.y=' + bb.min.y.toFixed(1));
     const k = 2.6 / Math.max(size.x, size.z, 0.001);
     const wrap = new THREE.Group();
     wrap.rotation.y = Math.PI / 2; // 模型长轴沿 Z → 转为 +X 朝前
@@ -544,6 +546,7 @@ export function createDiorama(scene, manager) {
   let driftYaw = 0.6;
   let simT = 0, storm = 0, speed = 1;
 
+  const WAVES_LAZY = { dx: 0.985, dz: 0.174 };
   const dio = {
     bottle, contentRoot,
     update(dt, rt, st, swellHfn) {
@@ -571,9 +574,21 @@ export function createDiorama(scene, manager) {
         bottle.rotation.z = pitchA + storm * Math.sin(rt * 2.1) * 0.02;
         bottle.rotation.x = rollA + storm * Math.sin(rt * 1.7) * 0.025;
         bottle.rotation.y = driftYaw;
-        driftYaw += dt * 0.02 * (1 + storm * 2);
-        bottle.position.x += Math.cos(driftYaw) * dt * 1.1;
-        bottle.position.z += Math.sin(driftYaw) * dt * 1.1;
+        // 漂流物理：摇杆转向/推进 + 波浪推动（永不静止）
+        const stick = st.stick || { x: 0, y: 0 };
+        const seaYaw = Math.atan2(WAVES_LAZY.dz, WAVES_LAZY.dx);           // 主浪方向
+        const wander = Math.sin(simT * 0.07) * 0.06 + Math.sin(simT * 0.023 + 2) * 0.04;
+        const waveYaw = Math.sin(simT * 0.31) * 0.05 * (1 + storm);        // 波浪拍打的偏航摆动
+        driftYaw += (stick.x * 0.95 + wander + waveYaw) * dt;
+        const surge = 1.5 + stick.y * 3.2                                  // 摇杆推进
+                    + Math.sin(simT * 0.42) * 0.35 * (1 + storm)           // 涌浪起伏推力
+                    + storm * 1.2;
+        bottle.position.x += (Math.cos(driftYaw) + WAVES_LAZY.dx * 0.35) * dt * surge;
+        bottle.position.z += (Math.sin(driftYaw) + WAVES_LAZY.dz * 0.35) * dt * surge;
+        // 横向摇摆（浪从侧面的推挤）
+        const swayR = Math.sin(simT * 0.55 + 1.3) * 0.25 * (1 + storm * 1.5);
+        bottle.position.x += -Math.sin(driftYaw) * swayR * dt;
+        bottle.position.z += Math.cos(driftYaw) * swayR * dt;
         if (Math.hypot(bottle.position.x, bottle.position.z) > 46) {
           driftYaw = Math.atan2(-bottle.position.z, -bottle.position.x) + (Math.random() - 0.5);
         }
@@ -730,6 +745,7 @@ export function createDiorama(scene, manager) {
       beamMat.opacity = 0.06 + nf * 0.5 + storm * 0.12;
       lanternMat.color.setRGB(1, 0.9, 0.6).multiplyScalar(0.5 + nf * 1.6);
       lhLamp.intensity = nf * 4;
+      hutWinMat.color.setRGB(1, 0.72, 0.35).multiplyScalar(0.3 + nf * 1.3);
       hutLamp.intensity = nf * 5;
       deepU.uNight.value = nf;
       return { night: nf };

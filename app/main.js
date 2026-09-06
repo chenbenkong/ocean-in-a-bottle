@@ -52,6 +52,40 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
+/* —— 虚拟摇杆（转向/推进） —— */
+const stickState = { x: 0, y: 0 };           // x: 左右转向  y: 前进(+)/后退(-)
+(function () {
+  const pad = document.getElementById('stick'), knob = document.getElementById('stickKnob');
+  let active = false, cx = 0, cy = 0, R = 46;
+  function setKnob(dx, dy) { knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; }
+  function apply(dx, dy) {
+    const len = Math.hypot(dx, dy), m = Math.min(1, len / R);
+    const nx = len ? dx / len * m : 0, ny = len ? dy / len * m : 0;
+    setKnob(nx * R * 0.72, ny * R * 0.72);
+    stickState.x = nx; stickState.y = -ny;
+  }
+  pad.addEventListener('pointerdown', e => {
+    active = true; try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+    const r = pad.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    audio.ensure(); audio.fadeTo(0.5);
+    apply(e.clientX - cx, e.clientY - cy); e.preventDefault();
+  });
+  pad.addEventListener('pointermove', e => { if (active) apply(e.clientX - cx, e.clientY - cy); });
+  const end = () => { active = false; setKnob(0, 0); stickState.x = 0; stickState.y = 0; };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+  // 键盘方向键 / WASD 同步摇杆
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.code] = true; syncKeys(); });
+  addEventListener('keyup', e => { keys[e.code] = false; syncKeys(); });
+  function syncKeys() {
+    const L = keys.ArrowLeft || keys.KeyA, Rt = keys.ArrowRight || keys.KeyD,
+          U = keys.ArrowUp || keys.KeyW, D = keys.ArrowDown || keys.KeyS;
+    if (L || Rt || U || D) apply((Rt ? 1 : 0) - (L ? 1 : 0), (D ? 1 : 0) - (U ? 1 : 0));
+    else if (!active) { stickState.x = 0; stickState.y = 0; setKnob(0, 0); }
+  }
+})();
+
 /* —— 交互 —— */
 let dragging = false, lastX = 0, lastY = 0, lastAct = performance.now();
 const dom = renderer.domElement;
@@ -101,7 +135,7 @@ function updateEnv() {
 }
 
 /* —— 主循环 —— */
-const state = { simT: 0, storm: 0, dayT: 0.12, speed: 1, amb: 0.5, sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color(), horizonCol: new THREE.Color(0x9fd0ee), bottlePos: new THREE.Vector3() };
+const state = { simT: 0, storm: 0, dayT: 0.12, speed: 1, amb: 0.5, sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color(), horizonCol: new THREE.Color(0x9fd0ee), bottlePos: new THREE.Vector3(), stick: stickState };
 // URL 参数控制（day/storm/speed）
 const qs = new URLSearchParams(location.search);
 if (qs.has('day')) state.dayT = parseFloat(qs.get('day')) || 0;
