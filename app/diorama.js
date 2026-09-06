@@ -92,11 +92,6 @@ export function createDiorama(scene, manager) {
     const cork = new THREE.Mesh(new THREE.CylinderGeometry(1.42 * SW, 1.5 * SW, 1.15 * SW, 24),
       new THREE.MeshLambertMaterial({ map: corkT }));
     cork.rotation.z = -Math.PI / 2; cork.position.set(18.05 * SW - HALF, 0, 0); bottle.add(cork);
-    for (const rr of [15.95, 16.2, 16.45]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(rr * SW * 0.94, 0.045 * SW, 8, 32),
-        new THREE.MeshLambertMaterial({ color: 0xa8c8b8, transparent: true, opacity: 0.5 }));
-      ring.rotation.y = Math.PI / 2; ring.position.set(rr * SW - HALF, 0, 0); bottle.add(ring);
-    }
     const rollC = document.createElement('canvas'); rollC.width = 64; rollC.height = 64;
     const rg2 = rollC.getContext('2d');
     rg2.fillStyle = '#e8d9b0'; rg2.fillRect(0, 0, 64, 64);
@@ -479,7 +474,7 @@ export function createDiorama(scene, manager) {
     const k = 3.2 / Math.max(size.x, size.z, 0.001);
     const wrap = new THREE.Group();
     wrap.rotation.y = Math.PI / 2; // 模型长轴沿 Z → 转为 +X 朝前
-    m.position.set(0, 0.45, 0); // 略微抬升，保证船体/甲板高于内海面
+    m.position.set(0, 1.6, 0); // 整体抬高：船体完全高于内海面，不被淹没
     wrap.add(m);
     wrap.scale.setScalar(k);
     shipTilt.add(wrap);
