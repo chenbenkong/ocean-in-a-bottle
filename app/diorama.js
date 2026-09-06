@@ -447,7 +447,6 @@ export function createDiorama(scene, manager) {
     m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
     const bb = new THREE.Box3().setFromObject(m);
     const size = bb.getSize(new THREE.Vector3());
-    window.__errs.push('PINNACE bbox y: ' + bb.min.y.toFixed(2) + ' .. ' + bb.max.y.toFixed(2));
     const k = 2.6 / Math.max(size.x, size.z, 0.001);
     const wrap = new THREE.Group();
     wrap.rotation.y = Math.PI / 2; // 模型长轴沿 Z → 转为 +X 朝前
