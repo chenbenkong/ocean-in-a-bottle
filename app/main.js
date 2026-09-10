@@ -1,59 +1,68 @@
-// 主入口：渲染器 / 后期特效 / 相机 / 交互 / 主循环
+// 主入口：渲染器 / 后期 / 相机 / 交互 / 昼夜 / 主循环
+// 愿景：黄昏书房 · 木桌上的瓶中沧海（微缩世界是房间里唯一的光源奇观）
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createEnvironment, swellH } from './environment.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createRoom } from './room.js';
 import { createDiorama } from './diorama.js';
 import { AudioEngine } from './audio.js';
-
 
 /* —— 渲染器 —— */
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.58;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x9ab8d0, 650, 4200);
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 9000);
-const cam = { theta: 0.85, phi: 1.22, r: 78, target: new THREE.Vector3(0, 3, 0) };
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.5, 900);
+const cam = { theta: 0.95, phi: 1.2, r: 96, target: new THREE.Vector3(0, 0.5, 0) };
+let shake = 0;
 function applyCam() {
   const s = Math.sin(cam.phi), c = Math.cos(cam.phi);
   camera.position.set(
     cam.target.x + cam.r * s * Math.cos(cam.theta),
     cam.target.y + cam.r * c,
     cam.target.z + cam.r * s * Math.sin(cam.theta));
+  if (shake > 0.001) {
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+  }
   camera.lookAt(cam.target);
 }
 applyCam();
 
 /* —— 场景模块 —— */
 const manager = new THREE.LoadingManager();
-const bar = document.getElementById('loadBar'), loadTxt = document.getElementById('loadTxt');
+const bar = document.getElementById('loadBar');
 manager.onProgress = (u, n, t) => { bar.style.width = Math.round(n / t * 100) + '%'; };
-manager.onLoad = () => {
-  document.getElementById('loading').classList.add('done');
-};
-setTimeout(() => document.getElementById('loading').classList.add('done'), 12000);
+manager.onLoad = () => document.getElementById('loading').classList.add('done');
+setTimeout(() => document.getElementById('loading').classList.add('done'), 15000);
 
-const env = createEnvironment(scene, manager);
+const room = createRoom(scene);
 const dio = createDiorama(scene, manager);
 const audio = new AudioEngine();
 
-/* —— 后期特效：Bloom + ACES 输出（MSAA×4） —— */
+// 玻璃反射用的中性室内环境（IBL）
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+/* —— 后期：Bloom + 输出（MSAA×4 HDR） —— */
 const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { samples: 4, type: THREE.HalfFloatType });
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.5, 0.88);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 0.82);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
-/* —— 虚拟摇杆（转向/推进） —— */
-const stickState = { x: 0, y: 0 };           // x: 左右转向  y: 前进(+)/后退(-)
+/* —— 虚拟摇杆（转动瓶身） —— */
+const stickState = { x: 0, y: 0 };
 (function () {
   const pad = document.getElementById('stick'), knob = document.getElementById('stickKnob');
   let active = false, cx = 0, cy = 0, R = 66;
@@ -65,7 +74,7 @@ const stickState = { x: 0, y: 0 };           // x: 左右转向  y: 前进(+)/�
     stickState.x = nx; stickState.y = -ny;
   }
   pad.addEventListener('pointerdown', e => {
-    active = true; try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+    active = true; try { pad.setPointerCapture(e.pointerId); } catch (err) { }
     const r = pad.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
     audio.ensure(); audio.fadeTo(0.5);
     apply(e.clientX - cx, e.clientY - cy); e.preventDefault();
@@ -74,13 +83,12 @@ const stickState = { x: 0, y: 0 };           // x: 左右转向  y: 前进(+)/�
   const end = () => { active = false; setKnob(0, 0); stickState.x = 0; stickState.y = 0; };
   pad.addEventListener('pointerup', end);
   pad.addEventListener('pointercancel', end);
-  // 键盘方向键 / WASD 同步摇杆
   const keys = {};
   addEventListener('keydown', e => { keys[e.code] = true; syncKeys(); });
   addEventListener('keyup', e => { keys[e.code] = false; syncKeys(); });
   function syncKeys() {
     const L = keys.ArrowLeft || keys.KeyA, Rt = keys.ArrowRight || keys.KeyD,
-          U = keys.ArrowUp || keys.KeyW, D = keys.ArrowDown || keys.KeyS;
+      U = keys.ArrowUp || keys.KeyW, D = keys.ArrowDown || keys.KeyS;
     if (L || Rt || U || D) apply((Rt ? 1 : 0) - (L ? 1 : 0), (D ? 1 : 0) - (U ? 1 : 0));
     else if (!active) { stickState.x = 0; stickState.y = 0; setKnob(0, 0); }
   }
@@ -91,16 +99,17 @@ let dragging = false, lastX = 0, lastY = 0, lastAct = performance.now();
 const dom = renderer.domElement;
 dom.addEventListener('pointerdown', e => {
   dragging = true; lastX = e.clientX; lastY = e.clientY; lastAct = performance.now();
-  dom.setPointerCapture(e.pointerId); audio.ensure(); audio.fadeTo(0.5);
+  try { dom.setPointerCapture(e.pointerId); } catch (err) { }
+  audio.ensure(); audio.fadeTo(0.5);
 });
 dom.addEventListener('pointermove', e => {
   if (!dragging) return;
   cam.theta -= (e.clientX - lastX) * 0.005;
-  cam.phi = Math.min(1.5, Math.max(0.12, cam.phi - (e.clientY - lastY) * 0.004));
+  cam.phi = Math.min(1.52, Math.max(0.35, cam.phi - (e.clientY - lastY) * 0.004));
   lastX = e.clientX; lastY = e.clientY; lastAct = performance.now();
 });
 addEventListener('pointerup', () => dragging = false);
-addEventListener('wheel', e => { cam.r = Math.min(240, Math.max(30, cam.r * (1 + e.deltaY * 0.001))); lastAct = performance.now(); }, { passive: true });
+addEventListener('wheel', e => { cam.r = Math.min(150, Math.max(30, cam.r * (1 + e.deltaY * 0.001))); lastAct = performance.now(); }, { passive: true });
 let speed = 1, stormHeld = false;
 addEventListener('keydown', e => {
   if (e.code === 'Space') { stormHeld = true; e.preventDefault(); }
@@ -122,25 +131,39 @@ addEventListener('resize', () => {
   composer.setSize(innerWidth, innerHeight);
 });
 
-/* —— 环境 PMREM —— */
-const pmrem = new THREE.PMREMGenerator(renderer);
-let envRT = null; const sceneEnv = new THREE.Scene();
-let lastEnvT = -9, lastEnvElev = 99;
-function updateEnv() {
-  if (envRT) envRT.dispose();
-  sceneEnv.add(env.sky);
-  envRT = pmrem.fromScene(sceneEnv);
-  scene.add(env.sky);
-  scene.environment = envRT.texture;
+/* —— 昼夜（瓶内世界的时间） —— */
+const PAL = [
+  { sun: 0xffc890, amb: 0.55, hor: 0xe8a878, top: 0x4a66a8 },
+  { sun: 0xfff2d8, amb: 0.62, hor: 0x9fd0ee, top: 0x2f7cc9 },
+  { sun: 0xffa060, amb: 0.5, hor: 0xf07a4e, top: 0x3b3f78 },
+  { sun: 0x9db8e8, amb: 0.16, hor: 0x182452, top: 0x0a1030 },
+];
+const _cA = new THREE.Color(), _cB = new THREE.Color();
+function computeDay(st) {
+  const seg = st.dayT * 4, i0 = Math.floor(seg) % 4, i1 = (i0 + 1) % 4, f0 = seg - Math.floor(seg);
+  const f = f0 * f0 * (3 - 2 * f0);
+  const a = PAL[i0], b = PAL[i1];
+  st.sunCol.copy(_cA.setHex(a.sun)).lerp(_cB.setHex(b.sun), f);
+  st.horizonCol.copy(_cA.setHex(a.hor)).lerp(_cB.setHex(b.hor), f);
+  st.topCol.copy(_cA.setHex(a.top)).lerp(_cB.setHex(b.top), f);
+  st.amb = a.amb + (b.amb - a.amb) * f;
+  const ang = st.dayT * Math.PI * 2;
+  const elv = Math.sin(ang);
+  st.sunDir.set(Math.cos(ang) * 0.8, Math.max(0.06, elv), 0.5).normalize();
+  st.night = Math.min(1, Math.max(0, -elv * 2.2));
 }
 
 /* —— 主循环 —— */
-const state = { simT: 0, storm: 0, dayT: 0.12, speed: 1, amb: 0.5, sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color(), horizonCol: new THREE.Color(0x9fd0ee), bottlePos: new THREE.Vector3(), stick: stickState };
-// URL 参数控制（day/storm/speed）
+const state = {
+  simT: 0, storm: 0, dayT: 0.12, speed: 1, night: 0,
+  amb: 0.5, sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color(),
+  horizonCol: new THREE.Color(0x9fd0ee), topCol: new THREE.Color(0x2f7cc9), stick: stickState,
+};
 const qs = new URLSearchParams(location.search);
 if (qs.has('day')) state.dayT = parseFloat(qs.get('day')) || 0;
 if (qs.get('storm') === '1') stormHeld = true;
 if (qs.has('speed')) speed = parseFloat(qs.get('speed')) || 1;
+
 const clock = new THREE.Clock();
 let fpsAcc = 0, fpsN = 0, fpsT = 0;
 const fpsEl = document.getElementById('fps');
@@ -156,27 +179,19 @@ function animate() {
   const st = stormHeld ? 1 : 0;
   state.storm += (st - state.storm) * Math.min(1, dt * 1.6);
   state.dayT = (state.dayT + dt * speed / DAY_LEN) % 1;
+  computeDay(state);
 
-  const envRet = env.update(dt, rt, state);
-  state.amb = envRet.night > 0 ? 0.5 - envRet.night * 0.34 : 0.62;
-  state.sunDir.copy(env.sunDir);
-  state.sunCol.copy(env.cur.sun);
-  state.horizonCol.copy(env.cur.hor);
+  const roomRet = room.update(dt, rt, state);
+  dio.update(dt, rt, state, null);
 
-  dio.update(dt, rt, state, swellH);
-  state.bottlePos.copy(dio.bottle.position);
-
-  if (envRet.flash) audio.thunder();
+  if (roomRet.flash) { audio.thunder(); shake = 1.4; }
+  shake *= Math.pow(0.005, dt);
   if (stormHeld || state.storm > 0.1) audio.setStorm(state.storm);
 
-  // PMREM 环境贴图（太阳高度变化超阈值时节流刷新）
-  if ((Math.abs(env.sunDir.y - lastEnvElev) > 0.03 || state.storm > 0.05) && rt - lastEnvT > 0.8) {
-    updateEnv(); lastEnvElev = env.sunDir.y; lastEnvT = rt;
-  }
-
-  // 相机
-  cam.target.set(dio.bottle.position.x, dio.bottle.position.y + 3, dio.bottle.position.z);
-  if (!dragging && performance.now() - lastAct > 3200) cam.theta += dt * 0.1;
+  // 相机：微距感的缓推环绕
+  const bp = dio.bottle.position;
+  cam.target.set(bp.x, bp.y + 1.2, bp.z);
+  if (!dragging && performance.now() - lastAct > 3200) cam.theta += dt * 0.07;
   applyCam();
 
   composer.render();
@@ -187,10 +202,5 @@ function animate() {
     fpsAcc = 0; fpsN = 0; fpsT = rt;
   }
 }
-
-updateEnv();
 animate();
-window.__dio = {
-  scene, env, cam, camera, setDay: v => state.dayT = v, setStorm: v => stormHeld = !!v, setSpeed: v => speed = v,
-  get: () => JSON.stringify({ storm: state.storm, dayT: state.dayT, speed, simT: state.simT }),
-};
+window.__dio = { scene, cam, camera, setDay: v => state.dayT = v, setStorm: v => stormHeld = !!v, get: () => JSON.stringify({ storm: state.storm, dayT: state.dayT, speed }) };

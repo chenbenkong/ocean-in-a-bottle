@@ -6,10 +6,9 @@ const AXIS_Y = 5.55, SEA = 3.2, OFF = 0.15, CX = -OFF;
 const ISLAND = { x: 3.4, z: 0, r: 1.85 };
 const ISLET = { x: 9.3, z: 2.15, r: 0.95, h: 0.95 };
 const RING_R = 2.65;
-const SW = 2.4;                       // 瓶体放大倍数
+const SW = 3.2;                       // 瓶体放大倍数
 const BOTTLE_LEN = 17.6 * SW;
 const HALF = BOTTLE_LEN / 2;
-const AXIS_FLOAT = 3.3;               // 瓶轴静浮高度
 
 function innerR(x) {
   const p = [[0, .15], [.5, 2.8], [1.2, 4.1], [2.2, 4.55], [10.8, 4.55], [11.6, 4.2], [12.7, 3.3], [13.6, 2.2], [14.4, 1.6], [16.4, 1.5], [17.5, 1.5]];
@@ -57,7 +56,7 @@ function voxelSmall(list) {
 export function createDiorama(scene, manager) {
   const gltfLoader = new GLTFLoader(manager);
 
-  const bottle = new THREE.Group(); bottle.rotation.order = 'YXZ'; scene.add(bottle);
+  const bottle = new THREE.Group(); bottle.rotation.order = 'YXZ'; scene.add(bottle); // 固定在桌上托架（原点）
   const contentRoot = new THREE.Group(); contentRoot.rotation.order = 'YXZ'; scene.add(contentRoot);
   const content = new THREE.Group(); contentRoot.add(content);
   content.scale.setScalar(SW);
@@ -70,10 +69,11 @@ export function createDiorama(scene, manager) {
       [1.72, 16.8], [1.8, 17.3], [1.72, 17.6]];
     const pts = prof.map(([r, y]) => new THREE.Vector2(r * SW, y * SW));
     const glass = new THREE.Mesh(new THREE.LatheGeometry(pts, 64), new THREE.MeshPhysicalMaterial({
-      color: 0xdff2ea, metalness: 0, roughness: 0.04,
-      transparent: true, opacity: 0.16, depthWrite: false,
-      envMapIntensity: 0.55, clearcoat: 1, clearcoatRoughness: 0.08,
-      side: THREE.DoubleSide,
+      color: 0xf4fbf7, metalness: 0, roughness: 0.05,
+      transmission: 1, thickness: 1.2, ior: 1.5,
+      attenuationColor: new THREE.Color(0xc9ecdc), attenuationDistance: 55,
+      envMapIntensity: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
+      specularIntensity: 1, side: THREE.DoubleSide,
     }));
     glass.rotation.z = -Math.PI / 2;
     glass.position.x = -HALF;
@@ -130,6 +130,32 @@ export function createDiorama(scene, manager) {
   }
 
   /* —— 瓶内日月星空（点缀） —— */
+  const skyI = {
+    cTop: { value: new THREE.Color(0x2f7cc9) },
+    cHor: { value: new THREE.Color(0x9fd0ee) },
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    cGlow: { value: new THREE.Color(0xfff0c8) },
+  };
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(4.02, 28, 18), new THREE.ShaderMaterial({
+    side: THREE.BackSide, uniforms: skyI,
+    vertexShader: 'varying vec3 vD; void main(){ vD=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader: `
+      varying vec3 vD; uniform vec3 cTop,cHor,uSunDir,cGlow;
+      void main(){
+        vec3 d = normalize(vD);
+        float h = clamp(d.y*1.4+0.25, 0.0, 1.0);
+        vec3 col = mix(cHor, cTop, pow(h, 0.8));
+        float s = max(dot(d, normalize(uSunDir)), 0.0);
+        col += cGlow * (pow(s, 24.0)*0.8 + pow(s, 4.0)*0.12);
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  }));
+  dome.position.set(5.6 + CX, 5.55, 0);
+  content.add(dome);
+  // 内太阳光（照亮瓶内世界的真实光源）
+  const innerSun = new THREE.DirectionalLight(0xffe0b0, 3.4);
+  innerSun.position.set(3, 8, 4); content.add(innerSun);
+  const innerAmb = new THREE.AmbientLight(0xfff0dd, 0.5); content.add(innerAmb);
   const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 10),
     new THREE.MeshBasicMaterial({ color: 0xffb840 })); content.add(sunMesh);
   const moonMeshI = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10),
@@ -502,19 +528,6 @@ export function createDiorama(scene, manager) {
     sprayVel[sprayIdx].copy(v); sprayLife[sprayIdx] = 0.7 + Math.random() * 0.4;
     sprayIdx = (sprayIdx + 1) % SPRAY_N;
   }
-  const OSPRAY_N = 100;
-  const oSprayGeo = new THREE.BufferGeometry();
-  const oSprayPos = new Float32Array(OSPRAY_N * 3), oSprayVel = [], oSprayLife = new Float32Array(OSPRAY_N);
-  for (let i = 0; i < OSPRAY_N; i++) { oSprayVel.push(new THREE.Vector3()); oSprayPos[i * 3 + 1] = -99; }
-  oSprayGeo.setAttribute('position', new THREE.BufferAttribute(oSprayPos, 3));
-  const oSpray = new THREE.Points(oSprayGeo, new THREE.PointsMaterial({ color: 0xeef8f6, size: 0.4, transparent: true, opacity: 0.8, depthWrite: false }));
-  oSpray.frustumCulled = false; scene.add(oSpray);
-  let oSprayIdx = 0;
-  function emitOSpray(p, v) {
-    oSprayPos[oSprayIdx * 3] = p.x; oSprayPos[oSprayIdx * 3 + 1] = p.y; oSprayPos[oSprayIdx * 3 + 2] = p.z;
-    oSprayVel[oSprayIdx].copy(v); oSprayLife[oSprayIdx] = 0.8 + Math.random() * 0.5;
-    oSprayIdx = (oSprayIdx + 1) % OSPRAY_N;
-  }
 
   /* —— 生灵 —— */
   const gulls = [];
@@ -596,11 +609,9 @@ export function createDiorama(scene, manager) {
   /* —— 更新 —— */
   const tmpV = new THREE.Vector3();
   let smoothHeave = 0, smoothPitch = 0, smoothRoll = 0;
-  let heaveY = AXIS_FLOAT, heaveV = 0, pitchA = 0, pitchV = 0, rollA = 0, rollV = 0;
-  let driftYaw = 0.6;
-  let simT = 0, storm = 0, speed = 1;
+  const heaveY0 = 0; let heaveY = 0, heaveV = 0, pitchA = 0, pitchV = 0, rollA = 0, rollV = 0;
+    let simT = 0, storm = 0, speed = 1;
 
-  const WAVES_LAZY = { dx: 0.985, dz: 0.174 };
   const dio = {
     bottle, contentRoot,
     update(dt, rt, st, swellHfn) {
@@ -611,68 +622,27 @@ export function createDiorama(scene, manager) {
       // 深水体裁剪面 = 内海平面的世界高度（随瓶体浮沉）
       deepU.uSea.value = bottle.position.y - SW * (AXIS_Y - SEA);
 
-      /* —— 瓶体浮力 —— */
+      /* —— 瓶在托架上：摇杆驱动摇晃 + 内部惯性回正 —— */
       {
-        const c = Math.cos(driftYaw), s = Math.sin(driftYaw);
-        const bx = bottle.position.x, bz = bottle.position.z;
-        const sf = 1 + storm * 1.8;
-        const hF = swellHfn(bx + c * 18, bz + s * 18, simT, sf);
-        const hA = swellHfn(bx - c * 18, bz - s * 18, simT, sf);
-        const hL = swellHfn(bx + s * 9, bz - c * 9, simT, sf);
-        const hR = swellHfn(bx - s * 9, bz + c * 9, simT, sf);
-        const targetHeave = AXIS_FLOAT + (hF + hA + hL + hR) / 4 * 0.85;
-        const targetPitch = Math.atan2(hF - hA, 36);
-        const targetRoll = Math.atan2(hL - hR, 18);
-        heaveV += ((targetHeave - heaveY) * 22 - heaveV * 5.5) * dt; heaveY += heaveV * dt;
-        pitchV += ((targetPitch - pitchA) * 18 - pitchV * 4.5) * dt; pitchA += pitchV * dt;
-        rollV += ((targetRoll - rollA) * 18 - rollV * 4.5) * dt; rollA += rollV * dt;
-        bottle.position.y = heaveY;
-        bottle.rotation.z = pitchA + storm * Math.sin(rt * 2.1) * 0.02;
-        bottle.rotation.x = rollA + storm * Math.sin(rt * 1.7) * 0.025;
-        bottle.rotation.y = driftYaw;
-        // 漂流物理：摇杆转向/推进 + 波浪推动（永不静止）
         const stick = st.stick || { x: 0, y: 0 };
-        const seaYaw = Math.atan2(WAVES_LAZY.dz, WAVES_LAZY.dx);           // 主浪方向
-        const wander = Math.sin(simT * 0.07) * 0.10 + Math.sin(simT * 0.023 + 2) * 0.07;
-        const waveYaw = Math.sin(simT * 0.31) * 0.05 * (1 + storm);        // 波浪拍打的偏航摆动
-        driftYaw += (stick.x * 0.95 + wander + waveYaw) * dt;
-        const surge = 2.4 + stick.y * 4.5                                  // 摇杆推进
-                    + Math.sin(simT * 0.42) * 0.7 * (1 + storm)            // 涌浪起伏推力
-                    + storm * 2.0;
-        bottle.position.x += (Math.cos(driftYaw) + WAVES_LAZY.dx * 0.35) * dt * surge;
-        bottle.position.z += (Math.sin(driftYaw) + WAVES_LAZY.dz * 0.35) * dt * surge;
-        // 横向摇摆（浪从侧面的推挤）
-        const swayR = Math.sin(simT * 0.55 + 1.3) * 0.45 * (1 + storm * 1.5);
-        bottle.position.x += -Math.sin(driftYaw) * swayR * dt;
-        bottle.position.z += Math.cos(driftYaw) * swayR * dt;
-        // 航行尾迹：瓶尾持续白色泡沫，凸显移动
-        if (Math.random() < 0.75) {
-          const lat = (Math.random() - 0.5) * 9;
-          emitOSpray(tmpV.set(bx - c * 16 - s * lat, 0.15, bz + s * 16 - c * lat),
-            new THREE.Vector3(-c * 0.5 + (Math.random() - 0.5), 0.4 + Math.random() * 0.6, -s * 0.5 + (Math.random() - 0.5)));
-        }
-        if (Math.hypot(bottle.position.x, bottle.position.z) > 46) {
-          driftYaw = Math.atan2(-bottle.position.z, -bottle.position.x) + (Math.random() - 0.5);
-        }
+        // 摇杆 → 目标倾角（绕 Z 转向 / 绕 X 俯仰），弹簧-阻尼逼近
+        const tz = stick.x * 0.45;
+        const tx = stick.y * 0.3;
+        const az = Math.sin(simT * 0.5) * 0.05 + storm * Math.sin(rt * 2.1) * 0.10;  // 内海自身的缓慢涌动
+        const ax = Math.cos(simT * 0.37) * 0.04 + storm * Math.sin(rt * 1.7) * 0.08;
+        pitchV += ((tz + az - pitchA) * 16 - pitchV * 5.0) * dt; pitchA += pitchV * dt;
+        rollV += ((tx + ax - rollA) * 16 - rollV * 5.0) * dt; rollA += rollV * dt;
+        // 轻微的抬升呼吸（托架上瓶身不离开软垫）
+        heaveV += ((storm * 0.6 + Math.sin(simT * 0.8) * 0.12 - heaveY0) * 14 - heaveV * 5.0) * dt;
+        heaveY += heaveV * dt;
+        bottle.position.y = heaveY;
+        bottle.rotation.z = pitchA;
+        bottle.rotation.x = rollA;
         contentRoot.position.copy(bottle.position);
-        contentRoot.rotation.y = bottle.rotation.y;
-        contentRoot.rotation.z = pitchA * 0.25;
-        contentRoot.rotation.x = rollA * 0.25;
-        if (storm > 0.25 && Math.random() < storm * 0.7) {
-          const a = Math.random() * Math.PI * 2, rr = 12.2;
-          emitOSpray(tmpV.set(bx + Math.cos(a) * rr, 0.4, bz + Math.sin(a) * rr),
-            new THREE.Vector3(Math.cos(a) * (2 + Math.random() * 3), 5 + Math.random() * 6 * storm, Math.sin(a) * (2 + Math.random() * 3)));
-        }
+        // 内部世界带一点滞后惯性，像真的液体
+        contentRoot.rotation.z = pitchA * 0.35;
+        contentRoot.rotation.x = rollA * 0.35;
       }
-      for (let i = 0; i < OSPRAY_N; i++) {
-        if (oSprayLife[i] <= 0) { oSprayPos[i * 3 + 1] = -99; continue; }
-        oSprayLife[i] -= dt;
-        oSprayVel[i].y -= 16 * dt;
-        oSprayPos[i * 3] += oSprayVel[i].x * dt;
-        oSprayPos[i * 3 + 1] += oSprayVel[i].y * dt;
-        oSprayPos[i * 3 + 2] += oSprayVel[i].z * dt;
-      }
-      oSprayGeo.attributes.position.needsUpdate = true;
 
       /* —— 帆船 —— */
       {
@@ -797,6 +767,12 @@ export function createDiorama(scene, manager) {
       const nf = Math.min(1, Math.max(0, -elv * 2.2));
       sunMesh.position.set(5.6 - Math.cos(ang) * 3.2 + CX, 5.55 + elv * 3.2, 0.9);
       sunMesh.visible = elv > -0.25;
+      skyI.cTop.value.copy(st.topCol); skyI.cHor.value.copy(st.horizonCol);
+      skyI.uSunDir.value.set(-Math.cos(ang) * 3.2, elv * 3.2, 0.9).normalize();
+      skyI.cGlow.value.setHex(0xfff0c8).lerp(new THREE.Color(0xffa060), 1 - Math.min(1, elv * 2));
+      innerSun.position.copy(sunMesh.position).sub(new THREE.Vector3(5.6 + CX, 5.55, 0)).normalize().multiplyScalar(10);
+      innerSun.color.copy(st.sunCol); innerSun.intensity = 3.6 * Math.max(0.05, Math.min(1, elv * 2 + 0.4));
+      innerAmb.intensity = 0.18 + st.amb * 0.6;
       moonMeshI.position.set(5.6 + Math.cos(ang) * 3.0 + CX, 5.55 - elv * 3.0, -0.7);
       moonMeshI.visible = elv < 0.25;
       stars.material.opacity = nf * (1 - storm * 0.85);

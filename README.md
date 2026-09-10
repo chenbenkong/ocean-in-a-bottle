@@ -1,7 +1,8 @@
 # 瓶中沧海 · Drifting Ocean in a Bottle
 
-一个 WebGL 微缩场景：一艘多桅木质帆船在封闭于玻璃瓶内的海洋上绕珊瑚岛航行，
-玻璃瓶本身漂浮在无边的 PBR 海面上随浪漂流。
+一个 WebGL 微缩场景：黄昏书房的木桌上，一只玻璃瓶静立于黄铜托架——瓶内自成世界：
+帆船绕珊瑚岛航行，灯塔光束扫过暮色，按下摇杆瓶身倾斜，内部海洋随惯性涌动。
+台灯暖光 + 舷窗暮色双光源，透射玻璃（transmission）真实折射瓶中天地。
 
 **在线试玩（GitHub Pages）：** https://chenbenkong.github.io/ocean-in-a-bottle/
 
